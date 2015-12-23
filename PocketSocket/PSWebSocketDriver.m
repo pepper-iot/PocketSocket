@@ -315,7 +315,7 @@ typedef NS_ENUM(NSInteger, PSWebSocketDriverState) {
         }
         
         // create deflate buffer
-        NSMutableData *deflated = [NSMutableData dataWithCapacity:ceil([payload length]/4.0)];
+        NSMutableData *deflated = [NSMutableData dataWithCapacity:[payload length]/4];
         
         // error
         NSError *error = nil;
@@ -366,6 +366,7 @@ typedef NS_ENUM(NSInteger, PSWebSocketDriverState) {
     
     // set masking data
     if(_mode == PSWebSocketModeClient) {
+	    headerBytes = header.mutableBytes; // because -appendBytes may have realloced header
         headerBytes[1] |= PSWebSocketMaskMask;
         
         uint8_t maskKey[4];
@@ -427,8 +428,11 @@ typedef NS_ENUM(NSInteger, PSWebSocketDriverState) {
             
             // create handshake
             CFHTTPMessageRef msg = CFHTTPMessageCreateEmpty(NULL, NO);
-            CFHTTPMessageAppendBytes(msg, (const UInt8 *)bytes, preBoundaryLength);
-            
+			if (!CFHTTPMessageAppendBytes(msg, (const UInt8 *)bytes, preBoundaryLength)) {
+                PSWebSocketSetOutError(outError, PSWebSocketErrorCodeHandshakeFailed, @"Not a valid HTTP response");
+                CFRelease(msg);
+                return -1;
+            }     
             
             // validate complete
             if(!CFHTTPMessageIsHeaderComplete(msg)) {
@@ -447,15 +451,7 @@ typedef NS_ENUM(NSInteger, PSWebSocketDriverState) {
                 PSWebSocketSetOutError(outError, PSWebSocketErrorCodeHandshakeFailed, @"Handshake failed");
                 return - 1;
             }
-            
-            // validate protocol
-            NSArray *protocolComponents = [_request.allHTTPHeaderFields[@"Sec-WebSocket-Protocol"] componentsSeparatedByString:@" "];
-            if(headers[@"Sec-WebSocket-Protocol"] && ![protocolComponents containsObject:headers[@"Sec-WebSocket-Protocol"]]) {
-                PSWebSocketSetOutError(outError, PSWebSocketErrorCodeHandshakeFailed, @"Invalid Sec-WebSocket-Protocol");
-                return -1;
-            }
-            _protocol = headers[@"Sec-WebSocket-Protocol"];
-            
+                        
             // validate accept
             if(![headers[@"Sec-WebSocket-Accept"] isEqualToString:[self acceptHeaderForKey:_handshakeSecKey]]) {
                 PSWebSocketSetOutError(outError, PSWebSocketErrorCodeHandshakeFailed, @"Invalid Sec-WebSocket-Accept");
@@ -467,6 +463,14 @@ typedef NS_ENUM(NSInteger, PSWebSocketDriverState) {
                 PSWebSocketSetOutError(outError, PSWebSocketErrorCodeHandshakeFailed, @"Invalid Sec-WebSocket-Version");
                 return -1;
             }
+			
+            // validate protocol
+            NSArray *protocolComponents = [_request.allHTTPHeaderFields[@"Sec-WebSocket-Protocol"] componentsSeparatedByString:@" "];
+            if(headers[@"Sec-WebSocket-Protocol"] && ![protocolComponents containsObject:headers[@"Sec-WebSocket-Protocol"]]) {
+                PSWebSocketSetOutError(outError, PSWebSocketErrorCodeHandshakeFailed, @"Invalid Sec-WebSocket-Protocol");
+                return -1;
+            }
+            _protocol = headers[@"Sec-WebSocket-Protocol"];
             
             // extensions
             NSArray *extensionComponents = [headers[@"Sec-WebSocket-Extensions"] componentsSeparatedByString:@"; "];

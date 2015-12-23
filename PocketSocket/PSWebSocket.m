@@ -17,6 +17,8 @@
 #import "PSWebSocketInternal.h"
 #import "PSWebSocketDriver.h"
 #import "PSWebSocketBuffer.h"
+#import <sys/socket.h>
+#import <arpa/inet.h>
 
 @interface PSWebSocket() <NSStreamDelegate, PSWebSocketDriverDelegate> {
     PSWebSocketMode _mode;
@@ -56,7 +58,8 @@
 
 #pragma mark - Properties
 
-@dynamic readyState;
+//@dynamic readyState;
+@synthesize URLRequest=_request;
 
 - (PSWebSocketReadyState)readyState {
     __block PSWebSocketReadyState value = 0;
@@ -64,6 +67,27 @@
         value = _readyState;
     }];
     return value;
+}
+
+
+- (NSString*) remoteHost {
+    // First recover the socket handle from the stream:
+    NSData* handleData = CFBridgingRelease(CFReadStreamCopyProperty(
+                                                  (__bridge CFReadStreamRef)_inputStream,
+                                                  kCFStreamPropertySocketNativeHandle));
+    if (!handleData || handleData.length != sizeof(CFSocketNativeHandle))
+        return nil;
+    CFSocketNativeHandle socketHandle = *(const CFSocketNativeHandle*)handleData.bytes;
+    // Get the remote/peer address in binary form:
+    struct sockaddr_in addr;
+    unsigned addrLen = sizeof(addr);
+    if (getpeername(socketHandle, (struct sockaddr*)&addr,&addrLen) < 0)
+        return nil;
+    // Format it in readable (e.g. dotted-quad) form, with the port number:
+    char nameBuf[INET6_ADDRSTRLEN];
+    if (inet_ntop(addr.sin_family, &addr.sin_addr, nameBuf, (socklen_t)sizeof(nameBuf)) == NULL)
+        return nil;
+    return [NSString stringWithFormat: @"%s:%hu", nameBuf, ntohs(addr.sin_port)];
 }
 
 #pragma mark - Initialization
@@ -152,6 +176,14 @@
     return self;
 }
 
+- (NSString*)protocol {
+    return _driver.protocol;
+}
+
+- (void) setProtocol:(NSString *)protocol {
+    _driver.protocol = protocol;
+}
+
 #pragma mark - Actions
 
 - (void)open {
@@ -202,6 +234,7 @@
         
         // send close code if we're not connecting
         if(!connecting) {
+			_closeCode = code;
             [_driver sendCloseCode:code reason:reason];
         }
         
@@ -210,7 +243,7 @@
         
         // disconnect hard in 30 seconds
         __weak typeof(self)weakSelf = self;
-        dispatch_after(dispatch_walltime(DISPATCH_TIME_NOW, 30.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_walltime(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf)strongSelf = weakSelf;
             if(!strongSelf) return;
             
@@ -272,7 +305,7 @@
     // prepare timeout
     if(_request.timeoutInterval > 0.0) {
         __weak typeof(self)weakSelf = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, _request.timeoutInterval * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(_request.timeoutInterval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf)strongSelf = weakSelf;
             if(strongSelf) {
                 [strongSelf executeWork:^{
@@ -300,6 +333,7 @@
     
     _inputStream = nil;
     _outputStream = nil;
+	_readyState = PSWebSocketReadyStateClosed;
 }
 
 #pragma mark - Pumping

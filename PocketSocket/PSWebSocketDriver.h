@@ -41,7 +41,7 @@
 @property (nonatomic, assign, readonly) PSWebSocketMode mode;
 @property (nonatomic, weak) id <PSWebSocketDriverDelegate> delegate;
 
-@property (nonatomic, strong, readonly) NSString *protocol;
+@property (nonatomic, strong) NSString *protocol;
 
 #pragma mark - Initialization
 
