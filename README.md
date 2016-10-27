@@ -1,6 +1,7 @@
 PocketSocket
 ============
 
+This is a forked copy of PocketSocket designed to work with NativeScript
 Objective-C websocket library for building things that work in realtime on iOS and OS X.
 
 ### Features
