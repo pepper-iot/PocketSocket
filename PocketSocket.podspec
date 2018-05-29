@@ -17,7 +17,7 @@ Pod::Spec.new do |s|
     ss.source_files = 'PocketSocket/PSWebSocketDriver.{h,m}', 'PocketSocket/PSWebSocketTypes.{h,m}', 'PocketSocket/PSWebSocketBuffer.{h,m}', 'PocketSocket/PSWebSocketDeflater.{h,m}', 'PocketSocket/PSWebSocketInflater.{h,m}', 'PocketSocket/PSWebSocketUTF8Decoder.{h,m}', 'PocketSocket/PSWebSocketInternal.h'
   
     ss.frameworks = 'CFNetwork', 'Foundation', 'Security'
-    ss.libraries = 'z', 'system'
+    ss.libraries = 'z', 'System'
   end
 
   s.subspec 'Client' do |ss|
